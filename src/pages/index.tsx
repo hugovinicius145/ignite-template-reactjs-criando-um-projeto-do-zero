@@ -6,9 +6,12 @@ import { FiCalendar } from 'react-icons/fi'
 import { BsPerson } from 'react-icons/bs';
 
 import { getPrismicClient } from '../services/prismic';
+import Prismic from '@prismicio/client';
+import { RichText } from 'prismic-dom';
 
 import commonStyles from '../styles/common.module.scss';
 import styles from './home.module.scss';
+import { useState } from 'react';
 
 interface Post {
   uid?: string;
@@ -29,17 +32,34 @@ interface HomeProps {
   postsPagination: PostPagination;
 }
 
-// export default function Home() {
-//   // TODO
-// }
+export default function Home({postsPagination}: HomeProps) {
 
-// export const getStaticProps = async () => {
-//   // const prismic = getPrismicClient();
-//   // const postsResponse = await prismic.query(TODO);
+  const [posts, setPosts] = useState<Post[]>(postsPagination.results);
+  const [nextPage, setNextPage] = useState(postsPagination.next_page);
 
-//   // TODO
-// };
-export default function Home() {
+  async function handleLoadPosts() {
+    const response = await fetch(`${postsPagination.next_page}`);
+    const data = await response.json();
+
+    const newPosts = data.results.map((post: Post) => {
+      return {
+        uid: post.uid,
+        first_publication_date: new Date(post.first_publication_date).toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+        data: {
+          title: RichText.asText(post.data.title),
+          subtitle: post.data?.subtitle,
+          author: post.data?.author,
+        }
+      }
+    });
+
+    setPosts([...posts, ...newPosts]);
+    setNextPage(data?.next_page);
+  }
 
   return (
     <>
@@ -47,82 +67,61 @@ export default function Home() {
         <title>Home - Spacetraveling</title>
       </Head>
       <main className={styles.container}>
-        <div className={styles.posts}>
-          <Link href={`/posts/slug`}>
-            <a href="">Como utilizar hooks</a>
-          </Link>
-          <p>pensando em sincronização em vez de ciclos de vida.</p>
-
-
-          <div>
-            <FiCalendar />
-            <p>15 Mar 2021</p>
-            <BsPerson />
-            <p>Hugo Vinicius</p>
+        {posts.map((post) => (
+          <div className={styles.posts} key={post.uid}>
+            <Link href={`/posts/${post.uid}`}>
+              <a>{post.data.title}</a>
+            </Link>
+            <p>{post.data.subtitle}</p>
+            <div>
+              <FiCalendar />
+              <p>{post.first_publication_date}</p>
+              <BsPerson />
+              <p>{post.data.author}</p>
+            </div>
           </div>
-        </div>
+        ))}
+        {nextPage ?
+          <h6 onClick={() => handleLoadPosts()}>Carregar mais posts</h6>
+          : null
+        }
 
-        {/* ------------ */}
-        <div className={styles.posts}>
-          <Link href={`/posts/slug`}>
-            <a href="">Como utilizar hooks</a>
-          </Link>
-          <p>pensando em sincronização em vez de ciclos de vida.</p>
-
-
-          <div>
-            <FiCalendar />
-            <p>15 Mar 2021</p>
-            <BsPerson />
-            <p>Hugo Vinicius</p>
-          </div>
-        </div>
-        <div className={styles.posts}>
-          <Link href={`/posts/slug`}>
-            <a href="">Como utilizar hooks</a>
-          </Link>
-          <p>pensando em sincronização em vez de ciclos de vida.</p>
-
-
-          <div>
-            <FiCalendar />
-            <p>15 Mar 2021</p>
-            <BsPerson />
-            <p>Hugo Vinicius</p>
-          </div>
-        </div>
-        <div className={styles.posts}>
-          <Link href={`/posts/slug`}>
-            <a href="">Como utilizar hooks</a>
-          </Link>
-          <p>pensando em sincronização em vez de ciclos de vida.</p>
-
-
-          <div>
-            <FiCalendar />
-            <p>15 Mar 2021</p>
-            <BsPerson />
-            <p>Hugo Vinicius</p>
-          </div>
-        </div>
-        <div className={styles.posts}>
-          <Link href={`/posts/slug`}>
-            <a href="">Como utilizar hooks</a>
-          </Link>
-          <p>pensando em sincronização em vez de ciclos de vida.</p>
-
-
-          <div>
-            <FiCalendar />
-            <p>15 Mar 2021</p>
-            <BsPerson />
-            <p>Hugo Vinicius</p>
-          </div>
-        </div>
-        {/* --------------------------- */}
-
-        <h6>Carregar mais posts</h6>
       </main>
     </>
   );
 }
+
+export const getStaticProps: GetStaticProps = async () => {
+  const prismic = getPrismicClient();
+  const postsResponse = await prismic.query([
+    Prismic.Predicates.at('document.type', 'posts')
+  ], {
+    fetch: ['post.title', 'post.author', 'post.subtitle'],
+    pageSize: 2,
+  });
+
+  const posts = postsResponse.results.map(post => {
+    return {
+      uid: post.uid,
+      first_publication_date: new Date(post.first_publication_date).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      data: {
+        title: RichText.asText(post.data.title),
+        subtitle: post.data?.subtitle,
+        author: post.data?.author,
+      }
+    }
+  })
+
+  return {
+    props: {
+      postsPagination: {
+        next_page: postsResponse.next_page,
+        results: posts,
+      },
+    }
+  }
+};
